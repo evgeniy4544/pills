@@ -1,0 +1,413 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>Приём таблеток</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700&family=Golos+Text:wght@400;500;600&display=swap">
+<style>
+  /* Layout: одна узкая колонка-чеклист, как листок назначений; сверху итог дня, внизу журнал по датам */
+  :root {
+    --bg: #f3f5f2; --card: #ffffff; --fg: #1c231f; --muted: #66706a;
+    --line: #dde3dd; --accent: #2b7a57; --accent-soft: #e1f0e7; --on-accent: #ffffff;
+    --warn: #9a6512; --warn-soft: #fbefd9; --bad: #b8432f;
+    --display: "Unbounded", "Golos Text", system-ui, sans-serif;
+    --body: "Golos Text", -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #121614; --card: #1b201d; --fg: #eef2ef; --muted: #98a39c;
+      --line: #2d3530; --accent: #5ec491; --accent-soft: #1d3a2b; --on-accent: #0d1a13;
+      --warn: #efb65c; --warn-soft: #3a2f1b; --bad: #ff7d68; color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #121614; --card: #1b201d; --fg: #eef2ef; --muted: #98a39c;
+    --line: #2d3530; --accent: #5ec491; --accent-soft: #1d3a2b; --on-accent: #0d1a13;
+    --warn: #efb65c; --warn-soft: #3a2f1b; --bad: #ff7d68; color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--fg); font: 16px/1.45 var(--body); }
+  main { max-width: 620px; margin: 0 auto; padding-block: 28px 64px;
+    padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+    display: flex; flex-direction: column; gap: 22px; }
+  header { display: flex; flex-direction: column; gap: 4px; }
+  .top { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+  h1 { font: 700 24px/1.15 var(--display); margin: 0; text-wrap: balance; letter-spacing: -.01em; }
+  .sync { font-size: 13px; color: var(--muted); }
+  .sync.err { color: var(--bad); }
+  .date { color: var(--muted); text-transform: capitalize; }
+  .summary { display: flex; flex-direction: column; gap: 8px; }
+  .bar { height: 10px; background: var(--line); border-radius: 5px; overflow: hidden; }
+  .bar div { height: 100%; background: var(--accent); width: 0; transition: width .3s; }
+  .count { font-size: 14px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .banner { background: var(--warn-soft); color: var(--warn); border-radius: 12px; padding: 12px 14px; font-size: 15px; }
+  .win { background: var(--accent); color: var(--on-accent); border-radius: 14px; padding: 20px 18px; text-align: center; }
+  .win b { display: block; font: 700 20px/1.2 var(--display); margin-bottom: 4px; }
+  .slot { display: flex; flex-direction: column; gap: 8px; }
+  .slot h2 { font: 500 19px/1.2 var(--display); margin: 0 0 2px; display: flex; gap: 10px; align-items: baseline; }
+  .slot h2 span { font: 500 15px var(--body); color: var(--muted); font-variant-numeric: tabular-nums; }
+  .slot h3 { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .07em; margin: 8px 0 0; }
+  .item { display: flex; align-items: flex-start; gap: 12px; width: 100%; text-align: left; font: inherit; color: inherit;
+    background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; cursor: pointer; }
+  .item:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .item.done { background: var(--accent-soft); border-color: transparent; }
+  .item.done .name { text-decoration: line-through; color: var(--muted); }
+  .check { width: 24px; height: 24px; border-radius: 50%; border: 2px solid var(--line); flex: none;
+    display: grid; place-items: center; color: var(--on-accent); font-size: 14px; margin-top: 1px; }
+  .done .check { background: var(--accent); border-color: var(--accent); }
+  .name { font-weight: 600; }
+  .note { color: var(--muted); font-size: 14px; }
+  .panel { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 16px; display: flex; flex-direction: column; gap: 4px; }
+  .panel h2 { font: 500 17px/1.2 var(--display); margin: 0 0 6px; }
+  .panel ul { margin: 0; padding-left: 20px; }
+  .hrow { display: flex; justify-content: space-between; gap: 12px; padding: 9px 0; border-top: 1px solid var(--line); font-variant-numeric: tabular-nums; }
+  .hrow .ok { color: var(--accent); font-weight: 600; }
+  .hrow .part { color: var(--warn); }
+  .hrow .miss { color: var(--bad); }
+  .streak { color: var(--muted); font-size: 14px; }
+  .empty { color: var(--muted); font-size: 14px; }
+  .tabs { display: flex; gap: 6px; background: var(--line); padding: 4px; border-radius: 12px; width: fit-content; }
+  .tabs button { font: 600 14px var(--body); color: var(--muted); background: none; border: 0; border-radius: 9px; padding: 8px 14px; cursor: pointer; }
+  .tabs button[aria-selected="true"] { background: var(--card); color: var(--fg); }
+  .tabs button:focus-visible, .calnav button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  main.wide { max-width: 1440px; }
+  .calnav { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .calnav h2 { font: 500 20px/1.2 var(--display); margin: 0; min-width: 190px; text-transform: capitalize; }
+  .calnav button { font: 600 15px var(--body); color: var(--fg); background: var(--card); border: 1px solid var(--line); border-radius: 9px; padding: 6px 12px; cursor: pointer; }
+  .calnav .legend { color: var(--muted); font-size: 13px; }
+  .cal { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px; }
+  .wd { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .07em; padding: 0 4px; }
+  .day { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 10px; min-width: 0;
+    display: flex; flex-direction: column; gap: 6px; }
+  .day.pad { background: none; border: 0; }
+  .day.today { border: 2px solid var(--accent); }
+  .day.full { background: var(--accent-soft); }
+  .day.missed { border-color: var(--bad); }
+  .day.future { opacity: .55; }
+  .dhead { display: flex; justify-content: space-between; align-items: baseline; gap: 6px; }
+  .dnum { font: 700 18px/1 var(--display); font-variant-numeric: tabular-nums; }
+  .dnum small { font: 500 12px var(--body); color: var(--muted); margin-left: 4px; }
+  .dcount { font-size: 12px; font-weight: 600; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .full .dcount { color: var(--accent); }
+  .dslot { font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; margin-top: 4px; }
+  .cb { display: flex; align-items: flex-start; gap: 6px; font-size: 12.5px; line-height: 1.3; cursor: pointer; }
+  .cb input { margin: 1px 0 0; width: 15px; height: 15px; flex: none; accent-color: var(--accent); cursor: pointer; }
+  .cb input:disabled { cursor: default; }
+  .cb input:checked + span .cbname { color: var(--muted); text-decoration: line-through; }
+  .cbname { display: block; }
+  .cbnote { display: block; font-size: 11px; line-height: 1.3; color: var(--muted); margin-top: 1px; }
+  .dgroup { font-size: 11px; font-style: italic; color: var(--muted); margin-top: 2px; }
+  .dtime { font-weight: 500; letter-spacing: 0; font-variant-numeric: tabular-nums; }
+  .dnote { font-size: 12px; color: var(--muted); }
+  @media (max-width: 900px) {
+    .cal { grid-template-columns: minmax(0, 1fr); }
+    .wd, .day.pad { display: none; }
+    .cb { font-size: 14px; }
+    .cbnote, .dgroup { font-size: 12.5px; }
+    .cb input { width: 18px; height: 18px; }
+  }
+  [hidden] { display: none !important; }
+  img { max-width: 100%; }
+  input[type=password] { width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--fg); font: inherit; }
+  .btn { font: 600 15px var(--body); background: var(--accent); color: var(--on-accent); border: 0; border-radius: 9px; padding: 10px 16px; cursor: pointer; width: fit-content; }
+  .btn:disabled { opacity: .6; }
+  .link { font: 13px var(--body); background: none; border: 0; color: var(--muted); text-decoration: underline; cursor: pointer; padding: 0; width: fit-content; }
+  .panel ol { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 4px; }
+  .err-msg { color: var(--bad); font-size: 14px; }
+  a { color: var(--accent); }
+  @media (prefers-reduced-motion: reduce) { .bar div { transition: none; } }
+</style>
+</head>
+<body style="margin:0">
+<main>
+  <header>
+    <div class="top"><h1>Приём таблеток</h1><span class="sync" id="sync">Загружаю отметки…</span></div>
+    <div class="date" id="date"></div>
+  </header>
+  <section class="panel" id="setup" hidden>
+    <h2>Подключение</h2>
+    <p class="note">Схема приёма и отметки хранятся в приватном репозитории <b>pills-data</b>. Чтобы страница их увидела, один раз на каждом устройстве вставьте личный токен GitHub.</p>
+    <ol class="note">
+      <li>Откройте <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">github.com → Fine-grained token</a>.</li>
+      <li>Repository access: <b>Only select repositories</b> → <b>pills-data</b>.</li>
+      <li>Permissions → Repository → <b>Contents: Read and write</b>.</li>
+      <li>Нажмите Generate token, скопируйте его и вставьте ниже.</li>
+    </ol>
+    <form id="setup-form" style="display:flex;flex-direction:column;gap:10px;margin-top:8px">
+      <input id="tok" type="password" placeholder="github_pat_…" autocomplete="off" aria-label="Токен GitHub">
+      <div class="err-msg" id="setup-msg"></div>
+      <button class="btn" id="setup-btn" type="submit">Подключить</button>
+    </form>
+  </section>
+  <div id="app" hidden style="display:flex;flex-direction:column;gap:22px">
+  <div class="tabs" role="tablist">
+    <button type="button" role="tab" id="tab-today" aria-selected="true">Сегодня</button>
+    <button type="button" role="tab" id="tab-calendar" aria-selected="false">Календарь</button>
+  </div>
+  <section id="calview" hidden style="display:flex;flex-direction:column;gap:14px">
+    <div class="calnav">
+      <button type="button" id="prev" aria-label="Предыдущий месяц">←</button>
+      <h2 id="month"></h2>
+      <button type="button" id="next" aria-label="Следующий месяц">→</button>
+      <span class="legend">Зелёный день: всё сделано · красная рамка: ничего не отмечено</span>
+    </div>
+    <div class="cal" id="cal"></div>
+  </section>
+  <div id="todayview" style="display:flex;flex-direction:column;gap:22px">
+  <section class="summary">
+    <div class="bar"><div id="bar"></div></div>
+    <div class="count" id="count"></div>
+  </section>
+  <div id="banner"></div>
+  <div id="win"></div>
+  <div id="slots" style="display:flex;flex-direction:column;gap:26px"></div>
+  </div>
+  <section class="panel" id="history">
+    <h2>Журнал</h2>
+    <div class="empty">Здесь появятся прошедшие дни: всё ли сделано и сколько пунктов отмечено.</div>
+  </section>
+  <section class="panel">
+    <h2>Всегда</h2>
+    <ul id="rules"></ul>
+  </section>
+  <button type="button" class="link" id="logout">Отключить это устройство</button>
+  </div>
+</main>
+<script>
+  // В этом публичном коде нет ни одного назначения: схема (plan.json) и отметки (done.json)
+  // лежат в приватном репозитории и подгружаются по личному токену владельца.
+  const OWNER = "evgeniy4544", REPO = "pills-data";
+  const API = `https://api.github.com/repos/${OWNER}/${REPO}/contents/`;
+
+  const ls = {
+    get(k, d) { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } },
+    set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
+    del(k) { try { localStorage.removeItem(k); } catch {} },
+  };
+
+  let token = ls.get("pills.token", "");
+  let plan = ls.get("pills.plan", null);
+  let done = ls.get("pills.done", {});          // { "YYYY-MM-DD": [id, …] }
+  let doneSha = null, saving = Promise.resolve();
+  let view = ls.get("pills.view", "today");
+  let calMonth = (() => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), 1); })();
+
+  const $ = id => document.getElementById(id);
+  const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const dayKey = d => d.toLocaleDateString("sv");
+  const dayDate = day => new Date(day + "T12:00:00");
+  const fmtDay = day => dayDate(day).toLocaleDateString("ru-RU", { weekday: "short", day: "numeric", month: "long" });
+  const b64decode = s => new TextDecoder().decode(Uint8Array.from(atob(s.replace(/\n/g, "")), c => c.charCodeAt(0)));
+  const b64encode = s => btoa(Array.from(new TextEncoder().encode(s), b => String.fromCharCode(b)).join(""));
+  const SLOT_ICON = { "Утро": "☀️", "Обед": "🍽", "Вечер": "🌙" };
+
+  function setSync(text, err) { const el = $("sync"); el.textContent = text; el.className = "sync" + (err ? " err" : ""); }
+
+  // ---------- GitHub ----------
+  async function gh(path, opts = {}) {
+    const r = await fetch(API + path, { ...opts, cache: "no-store",
+      headers: { Authorization: `Bearer ${token}`, Accept: "application/vnd.github+json" } });
+    if (!r.ok) { const e = new Error("HTTP " + r.status); e.status = r.status; throw e; }
+    return r.json();
+  }
+
+  async function pull() {
+    setSync("Загружаю…");
+    const [p, d] = await Promise.all([gh("plan.json"), gh("done.json")]);
+    plan = JSON.parse(b64decode(p.content)); ls.set("pills.plan", plan);
+    const remote = JSON.parse(b64decode(d.content));
+    doneSha = d.sha;
+    // Дни, отмеченные без связи, ещё не дошли до GitHub: оставляем их как на устройстве
+    const dirty = ls.get("pills.dirty", []);
+    for (const day of dirty) remote[day] = done[day] || [];
+    done = remote; ls.set("pills.done", done);
+    setSync("✓ Синхронизировано");
+    if (dirty.length) push();
+  }
+
+  function push() {
+    saving = saving.then(async () => {
+      setSync("Сохраняю…");
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          const r = await gh("done.json", { method: "PUT", body: JSON.stringify({
+            message: "Отметки " + dayKey(new Date()), content: b64encode(JSON.stringify(done, null, 1)), sha: doneSha }) });
+          doneSha = r.content.sha; ls.set("pills.dirty", []); setSync("✓ Сохранено"); return;
+        } catch (e) {
+          if (e.status !== 409 && e.status !== 422) throw e;
+          // Файл успели изменить с другого устройства: берём свежий и накладываем свои дни
+          const dirty = ls.get("pills.dirty", []);
+          const d = await gh("done.json"); doneSha = d.sha;
+          const remote = JSON.parse(b64decode(d.content));
+          for (const day of dirty) remote[day] = done[day] || [];
+          done = remote; ls.set("pills.done", done);
+        }
+      }
+    }).catch(e => setSync(e.status === 401 ? "Токен не подходит, вставьте новый" : "Нет связи: отметки сохранены на устройстве и отправятся позже", true));
+  }
+
+  // ---------- Схема ----------
+  const visibleOn = day => { const wd = dayDate(day).getDay() || 7;
+    return it => (!it.doxy || day <= plan.doxyLast) && (!it.days || it.days.includes(wd)); };
+  const itemsOn = day => plan.slots.flatMap(s => s.groups.flatMap(g => g.items.filter(visibleOn(day)).map(it => it.id)));
+
+  function result(day) {
+    const need = itemsOn(day), got = new Set(done[day] || []);
+    const n = need.filter(id => got.has(id)).length;
+    return { n, total: need.length, full: need.length > 0 && n === need.length };
+  }
+
+  function toggle(day, id) {
+    const cur = done[day] || [];
+    done = { ...done, [day]: cur.includes(id) ? cur.filter(x => x !== id) : [...cur, id] };
+    ls.set("pills.done", done);
+    const dirty = ls.get("pills.dirty", []);
+    if (!dirty.includes(day)) ls.set("pills.dirty", [...dirty, day]);
+    render(); push();
+  }
+
+  // ---------- Отрисовка ----------
+  function render() {
+    if (!token || !plan) return renderSetup();
+    $("setup").hidden = true; $("app").hidden = false;
+    const t = dayKey(new Date());
+    $("date").textContent = new Date().toLocaleDateString("ru-RU", { weekday: "long", day: "numeric", month: "long" });
+    const ids = done[t] || [];
+    const visible = visibleOn(t);
+    const { n, total, full } = result(t);
+
+    $("bar").style.width = total ? (n / total * 100) + "%" : "0";
+    $("count").textContent = `Сделано ${n} из ${total}`;
+
+    let banner = "";
+    if (t > plan.doxyLast && t <= plan.labsUntil) banner = plan.labsText;
+    else if (t <= plan.doxyLast) {
+      const left = Math.round((dayDate(plan.doxyLast) - dayDate(t)) / 864e5) + 1;
+      banner = `${plan.courseLabel}: осталось ${left} дн. (до ${dayDate(plan.doxyLast).toLocaleDateString("ru-RU", { day: "numeric", month: "long" })} включительно)`;
+    }
+    $("banner").innerHTML = banner ? `<div class="banner">${esc(banner)}</div>` : "";
+    $("win").innerHTML = full ? `<div class="win"><b>🎉 День пройден!</b>Всё сделано, ты молодец</div>` : "";
+
+    $("slots").innerHTML = plan.slots.map(s => {
+      const groups = s.groups.map(g => {
+        const items = g.items.filter(visible);
+        if (!items.length) return "";
+        return `<h3>${esc(g.title)}</h3>` + items.map(it => {
+          const d = ids.includes(it.id);
+          return `<button type="button" class="item${d ? " done" : ""}" data-id="${esc(it.id)}" aria-pressed="${d}">
+            <span class="check">${d ? "✓" : ""}</span>
+            <span><span class="name">${esc(it.name)}</span>${it.note ? `<br><span class="note">${esc(it.note)}</span>` : ""}</span></button>`;
+        }).join("");
+      }).join("");
+      return `<section class="slot"><h2>${esc(s.slot)} <span>${esc(s.time)}</span></h2>${groups}</section>`;
+    }).join("");
+    document.querySelectorAll(".item").forEach(el => el.onclick = () => toggle(t, el.dataset.id));
+
+    $("rules").innerHTML = (plan.rules || []).map(r => `<li>${esc(r)}</li>`).join("");
+    renderHistory(t);
+    if (view === "calendar") renderCalendar(t);
+  }
+
+  function renderHistory(t) {
+    const rows = [];
+    let streak = 0, open = true;
+    for (const d = dayDate(t); ; ) {
+      d.setDate(d.getDate() - 1);
+      const day = dayKey(d);
+      if (day < plan.start) break;
+      const { n, total, full } = result(day);
+      if (open) { if (full) streak++; else open = false; }
+      const [cls, text] = full ? ["ok", "✅ всё сделано"] : n ? ["part", `🟡 ${n} из ${total}`] : ["miss", "❌ пропущено"];
+      rows.push(`<div class="hrow"><span>${esc(fmtDay(day))}</span><span class="${cls}">${text}</span></div>`);
+    }
+    $("history").innerHTML = `<h2>Журнал</h2>` + (rows.length
+      ? (streak ? `<div class="streak">${streak} дн. подряд без пропусков 🔥</div>` : "") + rows.join("")
+      : `<div class="empty">Здесь появятся прошедшие дни: всё ли сделано и сколько пунктов отмечено. Первая запись будет завтра.</div>`);
+  }
+
+  function renderCalendar(t) {
+    $("month").textContent = calMonth.toLocaleDateString("ru-RU", { month: "long", year: "numeric" });
+    $("prev").disabled = dayKey(calMonth) <= plan.start.slice(0, 8) + "01";
+    const y = calMonth.getFullYear(), m = calMonth.getMonth();
+    const first = new Date(y, m, 1, 12), lastDay = new Date(y, m + 1, 0).getDate();
+    let html = ["пн", "вт", "ср", "чт", "пт", "сб", "вс"].map(w => `<div class="wd">${w}</div>`).join("");
+    html += '<div class="day pad"></div>'.repeat((first.getDay() || 7) - 1);
+    for (let i = 1; i <= lastDay; i++) {
+      const day = dayKey(new Date(y, m, i, 12));
+      const wdName = dayDate(day).toLocaleDateString("ru-RU", { weekday: "short" });
+      if (day < plan.start) {
+        html += `<div class="day future"><div class="dhead"><span class="dnum">${i}<small>${wdName}</small></span></div><div class="dnote">до начала курса</div></div>`;
+        continue;
+      }
+      const future = day > t, ids = done[day] || [];
+      const { n, total, full } = result(day);
+      const cls = ["day", day === t && "today", future && "future", full && "full", !future && day !== t && n === 0 && "missed"].filter(Boolean).join(" ");
+      const vis = visibleOn(day);
+      const body = plan.slots.map(s => {
+        const groups = s.groups.map(g => {
+          const items = g.items.filter(vis);
+          if (!items.length) return "";
+          return `<div class="dgroup">${esc(g.title)}</div>` + items.map(it =>
+            `<label class="cb"><input type="checkbox" id="cb-${day}-${it.id}" data-day="${day}" data-id="${esc(it.id)}"${ids.includes(it.id) ? " checked" : ""}${future ? " disabled" : ""}><span><span class="cbname">${esc(it.short || it.name)}</span>${it.note ? `<span class="cbnote">${esc(it.note)}</span>` : ""}</span></label>`
+          ).join("");
+        }).join("");
+        return `<div class="dslot">${SLOT_ICON[s.slot] || ""} ${esc(s.slot)} <span class="dtime">${esc(s.time)}</span></div>` + groups;
+      }).join("");
+      html += `<div class="${cls}"><div class="dhead"><span class="dnum">${i}<small>${wdName}</small></span><span class="dcount">${full ? "✓ " : ""}${n}/${total}</span></div>${body}</div>`;
+    }
+    $("cal").innerHTML = html;
+    $("cal").querySelectorAll("input[type=checkbox]").forEach(cb => cb.onchange = () => toggle(cb.dataset.day, cb.dataset.id));
+  }
+
+  function setView(v) {
+    view = v; ls.set("pills.view", v);
+    const cal = v === "calendar";
+    $("tab-today").setAttribute("aria-selected", String(!cal));
+    $("tab-calendar").setAttribute("aria-selected", String(cal));
+    $("calview").hidden = !cal;
+    $("todayview").hidden = cal;
+    document.querySelector("main").classList.toggle("wide", cal);
+    render();
+  }
+
+  function renderSetup(msg) {
+    $("app").hidden = true; $("setup").hidden = false;
+    $("date").textContent = ""; setSync("");
+    $("setup-msg").textContent = msg || "";
+  }
+
+  $("tab-today").onclick = () => setView("today");
+  $("tab-calendar").onclick = () => setView("calendar");
+  $("prev").onclick = () => { calMonth = new Date(calMonth.getFullYear(), calMonth.getMonth() - 1, 1); render(); };
+  $("next").onclick = () => { calMonth = new Date(calMonth.getFullYear(), calMonth.getMonth() + 1, 1); render(); };
+  $("logout").onclick = () => { ["pills.token", "pills.plan", "pills.done", "pills.dirty"].forEach(ls.del); location.reload(); };
+  $("setup-form").onsubmit = async e => {
+    e.preventDefault();
+    token = $("tok").value.trim(); if (!token) return;
+    $("setup-btn").disabled = true;
+    try { await pull(); ls.set("pills.token", token); setView(view); }
+    catch (err) {
+      token = "";
+      renderSetup(err.status === 401 ? "Токен не подходит. Скопируйте его заново." :
+        err.status === 404 ? `У токена нет доступа к репозиторию ${REPO}. Выберите его в настройках токена.` :
+        "Не получилось связаться с GitHub. Проверьте интернет и нажмите ещё раз.");
+    }
+    $("setup-btn").disabled = false;
+  };
+
+  // Новый день начинается сам; при возврате на вкладку подтягиваем отметки с других устройств
+  let shown = dayKey(new Date());
+  setInterval(() => { const k = dayKey(new Date()); if (k !== shown) { shown = k; render(); } }, 60000);
+  document.addEventListener("visibilitychange", () => { if (!document.hidden && token) pull().then(render).catch(() => {}); });
+
+  setView(view);
+  if (token) pull().then(render).catch(e => {
+    if (e.status === 401) { token = ""; ls.del("pills.token"); renderSetup("Токен больше не работает. Создайте новый и вставьте сюда."); }
+    else setSync("Нет связи, показываю сохранённое на устройстве", true);
+  });
+</script>
+</body>
+</html>
